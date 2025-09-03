@@ -44,7 +44,7 @@ def draw_annotations(frame, yolo_results):
         try:
             x1, y1, x2, y2 = map(int, det["bbox"])
             label = f"{det['class']} ({det.get('confidence', 0.0):.2f})"
-            color = (0, 255, 0)  # Green for all boxes
+            color = (0, 255, 0)
             cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), color, 2)
             (w, h), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
             cv2.rectangle(annotated_frame, (x1, y1 - 20), (x1 + w, y1), color, -1)
@@ -103,16 +103,16 @@ def process_video():
         print(f"Error processing uploaded video: {e}")
         return jsonify({"error": f"Failed to analyze video: {e}"}), 500
 
-# -------------------- Workflow 2: Live Camera Processing --------------------
-def camera_analysis_loop(source=0):
+# -------------------- Workflow 2: Live Camera Processing (Hybrid Approach) --------------------
+
+def camera_analysis_loop_local(source=0):
+    """ A stable loop for local webcams that guarantees screenshot saving. """
     global last_alert_time, latest_camera_frame
     try:
         for frame_count, (frame, clip) in enumerate(capture_frames(source)):
             if not is_camera_processing.is_set(): break
             
             yolo_results = detect_from_frame(frame, threshold=YOLO_CONF_THRESHOLD)
-            
-            # ✅ FINAL FIX: Always draw annotations and update the shared frame with the annotated version.
             annotated_frame = draw_annotations(frame, yolo_results)
             with lock:
                 latest_camera_frame = annotated_frame.copy()
@@ -124,51 +124,121 @@ def camera_analysis_loop(source=0):
             severity = select_severity(yolo_results, i3d_pred)
             
             if severity in ["danger", "suspicious"]:
-                screenshot_path = os.path.join(SCREENSHOT_DIR, f"live_{time.time()}.jpg")
-                cv2.imwrite(annotated_frame, screenshot_path) # Save the annotated frame
+                screenshot_path = os.path.join(SCREENSHOT_DIR, f"live_local_{time.time()}.jpg")
+                
+                # ✅ ADDED: Explicit check to ensure the screenshot is saved before proceeding.
+                try:
+                    save_success = cv2.imwrite(screenshot_path, annotated_frame)
+                    if not save_success:
+                        print(f"⚠️ WARNING: Failed to save screenshot to {screenshot_path}")
+                        screenshot_path = None # Ensure a failed save doesn't create a bad reference
+                except Exception as e:
+                    print(f"!!! ERROR saving screenshot: {e}")
+                    screenshot_path = None
+
+                # Only proceed to log and alert if the screenshot was saved successfully
+                if screenshot_path:
+                    yolo_classes = [det['class'] for det in yolo_results]
+                    alert_message = { "message": f"{severity.capitalize()} Detected: {', '.join(yolo_classes)}", "type": "error" if severity == "danger" else "warning", "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S") }
+                    yolo_strings = [f"{det['class']} ({det.get('confidence', 0.0):.2f})" for det in yolo_results]
+                    report_data = { "frame": frame_count, "yolo": ", ".join(yolo_strings), "i3d": f"{i3d_pred} ({i3d_conf:.2f})", "final": severity, "screenshot": screenshot_path }
+                    with lock:
+                        camera_alert_buffer.append(alert_message)
+                        camera_report_buffer.append(report_data)
+                    
+                    if severity == "danger" and (time.time() - last_alert_time) > ALERT_COOLDOWN:
+                        send_alert(annotated_frame, severity)
+                        last_alert_time = time.time()
+    except Exception as e:
+        print(f"Error in LOCAL camera analysis thread: {e}")
+    finally:
+        with lock: latest_camera_frame = None
+        print("Local camera analysis thread stopped.")
+
+def camera_analysis_loop_network(source=0):
+    """ A high-performance loop for network streams to prevent frame drops. """
+    global last_alert_time, latest_camera_frame
+    cap = None
+    try:
+        cap = cv2.VideoCapture(source)
+        if not cap.isOpened():
+            print(f"!!! FATAL ERROR in thread: Could not open network stream: {source}")
+            return
+        
+        frame_count = 0
+        while is_camera_processing.is_set():
+            cap.grab()
+            success, frame = cap.retrieve()
+            if not success:
+                time.sleep(0.1)
+                continue
+            
+            yolo_results = detect_from_frame(frame, threshold=YOLO_CONF_THRESHOLD)
+            annotated_frame = draw_annotations(frame, yolo_results)
+            with lock:
+                latest_camera_frame = annotated_frame.copy()
+            
+            resized_frame = cv2.resize(frame, I3D_INPUT_SIZE)
+            clip = getattr(threading.current_thread(), "clip", [])
+            clip.append(resized_frame)
+            if len(clip) > CLIP_LEN:
+                clip.pop(0)
+            setattr(threading.current_thread(), "clip", clip)
+            
+            i3d_pred, i3d_conf = "normal", 0.0
+            if len(clip) >= CLIP_LEN:
+                i3d_pred, i3d_conf = run_prediction(clip)
+            
+            severity = select_severity(yolo_results, i3d_pred)
+            
+            if severity in ["danger", "suspicious"]:
+                screenshot_path = os.path.join(SCREENSHOT_DIR, f"live_network_{time.time()}.jpg")
+                cv2.imwrite(annotated_frame, screenshot_path)
+                
                 yolo_classes = [det['class'] for det in yolo_results]
-                alert_message = {
-                    "message": f"{severity.capitalize()} Detected: {', '.join(yolo_classes)}",
-                    "type": "error" if severity == "danger" else "warning", "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                }
+                alert_message = { "message": f"{severity.capitalize()} Detected: {', '.join(yolo_classes)}", "type": "error" if severity == "danger" else "warning", "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S") }
                 yolo_strings = [f"{det['class']} ({det.get('confidence', 0.0):.2f})" for det in yolo_results]
-                report_data = {
-                    "frame": frame_count, "yolo": ", ".join(yolo_strings), "i3d": f"{i3d_pred} ({i3d_conf:.2f})",
-                    "final": severity, "screenshot": screenshot_path
-                }
+                report_data = { "frame": frame_count, "yolo": ", ".join(yolo_strings), "i3d": f"{i3d_pred} ({i3d_conf:.2f})", "final": severity, "screenshot": screenshot_path }
                 with lock:
                     camera_alert_buffer.append(alert_message)
                     camera_report_buffer.append(report_data)
+
                 if severity == "danger" and (time.time() - last_alert_time) > ALERT_COOLDOWN:
                     send_alert(annotated_frame, severity)
                     last_alert_time = time.time()
+            
+            frame_count += 1
+            time.sleep(0.01)
     except Exception as e:
-        print(f"Error in camera analysis thread: {e}")
+        print(f"Error in NETWORK camera analysis thread: {e}")
     finally:
+        if cap: cap.release()
         with lock: latest_camera_frame = None
-        print("Camera analysis thread stopped.")
+        print("Network camera analysis thread stopped.")
 
 @app.route("/api/start_camera", methods=["POST"])
 def start_camera_analysis():
+    """ This route now intelligently selects the correct analysis loop. """
     global camera_thread
     if camera_thread is None or not camera_thread.is_alive():
         data = request.get_json()
         video_source = data.get('source', 0) if data else 0
-        if isinstance(video_source, str) and not video_source.strip(): video_source = 0
-        print(f"Testing video source: {video_source}")
-        cap_test = cv2.VideoCapture(video_source)
-        if not cap_test.isOpened():
-            cap_test.release()
-            print(f"!!! FAILED to open video source: {video_source}")
-            return jsonify({"error": f"Failed to open video stream. Check the URL or camera index, and ensure it's not blocked by a firewall."}), 400
-        cap_test.release()
-        print("Video source test successful.")
+        
+        is_network_stream = isinstance(video_source, str)
+        if is_network_stream and not video_source.strip():
+            video_source = 0
+            is_network_stream = False
+            
+        target_loop = camera_analysis_loop_network if is_network_stream else camera_analysis_loop_local
+        
         is_camera_processing.set()
         with lock:
             camera_alert_buffer.clear()
             camera_report_buffer.clear()
-        camera_thread = threading.Thread(target=camera_analysis_loop, args=(video_source,), daemon=True)
+        
+        camera_thread = threading.Thread(target=target_loop, args=(video_source,), daemon=True)
         camera_thread.start()
+        print(f"Starting analysis with {'NETWORK' if is_network_stream else 'LOCAL'} loop for source: {video_source}")
         return jsonify({"status": "Camera analysis started."})
     return jsonify({"status": "Camera analysis is already running."})
 
@@ -201,7 +271,6 @@ def generate_camera_report():
         print(f"!!! [Report Generation] AN ERROR OCCURRED: {e} !!!")
         return jsonify({"status": f"An error occurred during report generation: {e}"}), 500
 
-# -------------------- Past Reports Routes --------------------
 @app.route("/api/reports", methods=["GET"])
 def fetch_reports():
     reports = get_reports()
@@ -212,8 +281,7 @@ def remove_report(report_id):
     pdf_path = delete_report(report_id)
     if pdf_path:
         try:
-            if os.path.exists(pdf_path):
-                os.remove(pdf_path)
+            if os.path.exists(pdf_path): os.remove(pdf_path)
             return jsonify({"status": "Report deleted successfully."})
         except Exception as e:
             return jsonify({"error": f"Error deleting file: {e}"}), 500
@@ -226,7 +294,6 @@ def download_report(filename):
         return send_file(file_path, as_attachment=True)
     return jsonify({"error": "File not found."}), 404
 
-# -------------------- Basic and Utility Routes --------------------
 @app.route("/api/alerts", methods=["GET"])
 def get_alerts():
     with lock: return jsonify(camera_alert_buffer[-5:][::-1])
@@ -250,6 +317,6 @@ def gen_frames_from_thread():
 def video_feed():
     return Response(gen_frames_from_thread(), mimetype='multipart/x-mixed-replace; boundary=frame')
     
-# ---------- ENTRY POINT ----------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=False)
+
