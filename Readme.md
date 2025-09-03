@@ -2,7 +2,7 @@
 
 [![Python](https://img.shields.io/badge/Python-3.8+-blue)](https://www.python.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-v18+-green)](https://nodejs.org/)
-[![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE)
+
 
 Sentry AI is a **full-stack intelligent surveillance application** that uses deep learning models to analyze video streams in real-time, detect threats, and generate automated alerts and reports. It features a **modern web dashboard** for monitoring live feeds, reviewing past events, and managing reports.
 
