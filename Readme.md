@@ -66,14 +66,34 @@ Sentry AI is a **full-stack intelligent surveillance application** that uses dee
 ```bash
 /
 ├── Sentry_AI_V2/       # Backend: Python, Flask, and AI models
-│   ├── app.py
-│   ├── models/
-│   ├── detector/
-│   └── ...
+│    │
+│    ├── models/               # YOLO & I3D weights
+│    ├── detector/             # YOLO, I3D, severity selector
+│    ├── input/                # Camera/video stream
+│    ├── alerts/               # Telegram bot integration
+│    ├── reports/              # PDF report generator
+│    ├── database/             # Event logger
+│    ├── llm/                  # LLM summary generator
+│    ├── main.py
+│    ├── app.py
+│    └── .env                  # API keys  
 └── sentry-eye-live/    # Frontend: React, Vite, and UI components
     ├── src/
+    ├── public/
     ├── package.json
-    └── ...
+    ├── .env
+    ├── bun.lockb
+    ├── components.json
+    ├── eslint.config.js
+    ├── index.html
+    ├── package-lock.json
+    ├── package.json
+    ├── postcss.config.js
+    ├── tailwind.config.ts
+    ├── tsconfig.app.json
+    ├── tsconfig.json
+    ├── tsconfig.node.json
+    └── vite.config.ts
 
 ```
 ---
