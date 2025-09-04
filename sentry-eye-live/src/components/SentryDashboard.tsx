@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import axios from "axios";
-import { Play, Pause, Upload, Camera, BarChart3, Shield, Wifi, Loader2 } from "lucide-react"; // ✅ Added Loader2 icon
+import { Play, Pause, Upload, Camera, BarChart3, Shield, Wifi, Loader2 ,AlertTriangle,CheckCircle2} from "lucide-react"; // ✅ Added Loader2 icon
 
 type VideoSource = "none" | "camera" | "upload";
 
@@ -254,11 +254,25 @@ export const SentryDashboard = () => {
           )}
           {/* Analysis Results */}
           {analysisResult && (
-            <CardContent className="mt-4 p-3 bg-muted rounded-lg border border-border">
-              <h3 className="text-lg font-bold">Analysis Result</h3>
-              <pre className="text-sm whitespace-pre-wrap text-foreground">
-                {JSON.stringify(analysisResult, null, 2)}
-              </pre>
+            <CardContent className="mt-4 p-4 bg-muted rounded-lg border border-border">
+              <h3 className="text-lg font-bold mb-2">Analysis Result</h3>
+              {analysisResult.error ? (
+                <div className="flex items-center gap-3 p-3 bg-red-900/50 text-red-300 rounded-md">
+                  <AlertTriangle className="w-6 h-6" />
+                  <div>
+                    <p className="font-semibold">An Error Occurred</p>
+                    <p className="text-sm">{analysisResult.error}</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3 p-3 bg-green-900/50 text-green-300 rounded-md">
+                  <CheckCircle2 className="w-6 h-6" />
+                  <div>
+                    <p className="font-semibold">{analysisResult.status}</p>
+                    <p className="text-sm">Found {analysisResult.events_found} significant event(s). A report has been sent and archived.</p>
+                  </div>
+                </div>
+              )}
             </CardContent>
           )}
         </Card>
