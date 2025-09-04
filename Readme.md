@@ -53,7 +53,11 @@ Sentry AI is a **full-stack intelligent surveillance application** that uses dee
 | Area      | Technology                                                                 |
 |-----------|---------------------------------------------------------------------------|
 | Frontend  | React (Vite), TypeScript, Tailwind CSS, Shadcn/ui, Axios                  |
+<<<<<<< HEAD
 | Backend   | Python, Flask, OpenCV, Ultralytics YOLOv11, threading                     |
+=======
+| Backend   | Python, Flask, OpenCV, Ultralytics YOLO, threading                        |
+>>>>>>> b235957517431ac416f7e1f7693569ebb5fd5ca2
 | DevOps    | concurrently (run frontend + backend with one command)                     |
 | Database  | Flat-file JSON for persistent logging                                      |
 
@@ -92,7 +96,11 @@ Sentry AI is a **full-stack intelligent surveillance application** that uses dee
 ### Prerequisites
 - Python (3.8+) and pip
 - Node.js (v18+) and npm
+<<<<<<< HEAD
 - A YOLO model file named `best.pt` and `violence_yolo.pt`
+=======
+- A YOLO model file named `best.pt` and `violence_detector.pt`
+>>>>>>> b235957517431ac416f7e1f7693569ebb5fd5ca2
 
 ---
 
@@ -118,7 +126,11 @@ pip install -r requirements.txt
 
 # Place your YOLO model file in the 'models' directory:
 # Sentry_AI_V2/models/best.pt
+<<<<<<< HEAD
 # Sentry_AI_V2/models/violence_yolo.pt
+=======
+# Sentry_AI_V2/models/violence_detector.pt
+>>>>>>> b235957517431ac416f7e1f7693569ebb5fd5ca2
 ```
 
 ### 2. Frontend Setup (sentry-eye-live)
