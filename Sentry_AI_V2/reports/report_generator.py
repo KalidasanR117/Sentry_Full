@@ -36,7 +36,7 @@ def generate_pdf_report(event_buffer, summary_text, output_path):
 
     Args:
         event_buffer (list): List of dicts with keys:
-                             'frame', 'yolo', 'i3d', 'final', 'screenshot'
+                             'frame', 'yolo', 'violence', 'final', 'screenshot'
         summary_text (str): LLM-generated summary of events
         output_path (str): Path to save the PDF
     """
@@ -89,7 +89,7 @@ def generate_pdf_report(event_buffer, summary_text, output_path):
         # Event info
         pdf.set_font("Arial", "", 12)
         pdf.cell(0, 8, f"YOLO Detection: {event['yolo']}", ln=True)
-        pdf.cell(0, 8, f"I3D Prediction: {event['i3d']}", ln=True)
+        pdf.cell(0, 8, f"Violence Detection: {event['violence']}", ln=True)
         severity_color = {"danger": (255,0,0), "suspicious": (255,165,0), "normal": (0,128,0)}
         pdf.set_text_color(*severity_color.get(event["final"], (0,0,0)))
         pdf.cell(0, 8, f"Final Severity: {event['final']}", ln=True)
@@ -102,7 +102,7 @@ def generate_pdf_report(event_buffer, summary_text, output_path):
             img = Image.open(img_path)
             img_w, img_h = img.size
 
-            # Max page width and remaining height
+            # Max width and remaining height on page
             max_w = 180
             remaining_h = pdf.h - pdf.get_y() - pdf.b_margin
 

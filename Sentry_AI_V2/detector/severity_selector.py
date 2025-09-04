@@ -1,27 +1,26 @@
 from detector.yolo_detector import detect_from_frame
 
-# I3D → severity mapping
-I3D_SEVERITY_MAP = {
-    "normal": "normal",
-    "robbery": "danger",
-    "fight": "suspicious"
+# Violence YOLO → severity mapping
+VIOLENCE_SEVERITY_MAP = {
+    "non-violence": "normal",
+    "violence": "danger"  # violence is treated as danger
 }
 
-def select_severity(yolo_detections, i3d_prediction):
+def select_severity(yolo_detections, violence_prediction):
     """
-    Combine YOLO detections and I3D prediction to decide final severity.
+    Combine YOLO object detections and Violence YOLO prediction to decide final severity.
     
     Args:
         yolo_detections: list of dicts [{"class":..., "severity":..., ...}, ...]
-        i3d_prediction: string output from I3D ("normal", "robbery", "fight")
+        violence_prediction: string output from Violence YOLO ("violence", "non-violence")
         
     Returns:
         final_severity: "normal", "suspicious", or "danger"
     """
-    # 1️⃣ Default severity from I3D
-    final_severity = I3D_SEVERITY_MAP.get(i3d_prediction, "normal")
+    # 1️⃣ Default severity from Violence YOLO
+    final_severity = VIOLENCE_SEVERITY_MAP.get(violence_prediction, "normal")
 
-    # 2️⃣ Override if YOLO finds danger
+    # 2️⃣ Override if Object YOLO finds higher severity
     for det in yolo_detections:
         if det["severity"] == "danger":
             final_severity = "danger"

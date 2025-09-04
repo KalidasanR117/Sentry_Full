@@ -9,7 +9,7 @@ from flask_cors import CORS
 # --- SentryAI module imports ---
 from input.camera_stream import capture_frames
 from detector.yolo_detector import detect_from_frame
-from detector.i3d_detector import run_prediction
+from detector.violence_detector import run_violence_detection
 from detector.severity_selector import select_severity
 from llm.llm_summary import generate_summary_from_events
 from reports.report_generator import generate_pdf_report
@@ -27,30 +27,36 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 os.makedirs(SCREENSHOT_DIR, exist_ok=True)
 
-CLIP_LEN = 40
 YOLO_CONF_THRESHOLD = 0.4
 ALERT_COOLDOWN = 15
-I3D_INPUT_SIZE = (128, 128)
 
 # -------------------- Flask App Setup --------------------
 app = Flask(__name__)
 CORS(app)
 
 # -------------------- Annotation Helper Function --------------------
-def draw_annotations(frame, yolo_results):
-    """Draws bounding boxes and labels on a frame."""
+def draw_annotations(frame, yolo_results, violence_results):
+    """Draws bounding boxes for both object and violence detection."""
     annotated_frame = frame.copy()
     for det in yolo_results:
         try:
             x1, y1, x2, y2 = map(int, det["bbox"])
-            label = f"{det['class']} ({det.get('confidence', 0.0):.2f})"
+            label = f"Object: {det['class']} ({det.get('confidence', 0.0):.2f})"
             color = (0, 255, 0)
             cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), color, 2)
-            (w, h), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
-            cv2.rectangle(annotated_frame, (x1, y1 - 20), (x1 + w, y1), color, -1)
-            cv2.putText(annotated_frame, label, (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
+            cv2.putText(annotated_frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
         except Exception as e:
-            print(f"Could not draw annotation for det {det}: {e}")
+            print(f"Could not draw object annotation: {e}")
+    for det in violence_results:
+        if det.get("class") == "violence":
+            try:
+                x1, y1, x2, y2 = map(int, det["bbox"])
+                label = f"Action: {det['class']} ({det.get('confidence', 0.0):.2f})"
+                color = (0, 0, 255)
+                cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), color, 2)
+                cv2.putText(annotated_frame, label, (x1, y2 + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
+            except Exception as e:
+                print(f"Could not draw violence annotation: {e}")
     return annotated_frame
 
 # -------------------- Real-time Camera State Management --------------------
@@ -71,26 +77,42 @@ def process_video():
     video.save(save_path)
     video_specific_events, local_last_alert_time = [], 0
     try:
-        for frame_count, (frame, clip) in enumerate(capture_frames(save_path)):
+        for frame_count, (frame, _) in enumerate(capture_frames(save_path)):
             yolo_results = detect_from_frame(frame, threshold=YOLO_CONF_THRESHOLD)
-            i3d_pred, i3d_conf = "normal", 0.0
-            if len(clip) >= CLIP_LEN:
-                clip_preprocessed = [cv2.resize(f, I3D_INPUT_SIZE) for f in clip]
-                i3d_pred, i3d_conf = run_prediction(clip_preprocessed)
-            severity = select_severity(yolo_results, i3d_pred)
+            violence_results = run_violence_detection(frame)
+            violence_prediction = violence_results[0]['class']
+            severity = select_severity(yolo_results, violence_prediction)
+            
             if severity in ["danger", "suspicious"]:
-                annotated_frame = draw_annotations(frame, yolo_results)
-                screenshot_path = os.path.join(SCREENSHOT_DIR, f"upload_{time.time()}.jpg")
+                annotated_frame = draw_annotations(frame, yolo_results, violence_results)
+                screenshot_path = os.path.abspath(os.path.join(SCREENSHOT_DIR, f"upload_{time.time()}.jpg"))
                 cv2.imwrite(screenshot_path, annotated_frame)
-                yolo_classes = [f"{det['class']} ({det.get('confidence', 0.0):.2f})" for det in yolo_results]
+                
+                yolo_classes = [f"{det['class']}" for det in yolo_results]
+                alert_message = {
+                    "message": f"{severity.capitalize()} Detected in Upload: {', '.join(yolo_classes)} & {violence_prediction}",
+                    "type": "error" if severity == "danger" else "warning",
+                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                }
+                with lock:
+                    camera_alert_buffer.append(alert_message)
+
+                yolo_strings = [f"{det['class']} ({det.get('confidence', 0.0):.2f})" for det in yolo_results]
                 event_data = {
-                    "frame": frame_count, "yolo": ", ".join(yolo_classes), "i3d": f"{i3d_pred} ({i3d_conf:.2f})",
-                    "final": severity, "screenshot": screenshot_path, "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    "frame": frame_count,
+                    "yolo": ", ".join(yolo_strings),
+                    "violence": violence_prediction,
+                    "yolo_object": ", ".join(yolo_strings),
+                    "yolo_violence": violence_prediction,
+                    "final": severity,
+                    "screenshot": screenshot_path,
+                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 }
                 video_specific_events.append(event_data)
                 if severity == "danger" and (time.time() - local_last_alert_time) > ALERT_COOLDOWN:
                     send_alert(annotated_frame, severity)
                     local_last_alert_time = time.time()
+
         if video_specific_events:
             summary_text = generate_summary_from_events(video_specific_events)
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -104,48 +126,47 @@ def process_video():
         return jsonify({"error": f"Failed to analyze video: {e}"}), 500
 
 # -------------------- Workflow 2: Live Camera Processing (Hybrid Approach) --------------------
-
 def camera_analysis_loop_local(source=0):
-    """ A stable loop for local webcams that guarantees screenshot saving. """
     global last_alert_time, latest_camera_frame
     try:
-        for frame_count, (frame, clip) in enumerate(capture_frames(source)):
+        for frame_count, (frame, _) in enumerate(capture_frames(source)):
             if not is_camera_processing.is_set(): break
-            
             yolo_results = detect_from_frame(frame, threshold=YOLO_CONF_THRESHOLD)
-            annotated_frame = draw_annotations(frame, yolo_results)
+            violence_results = run_violence_detection(frame)
+            violence_prediction = violence_results[0]['class']
+            annotated_frame = draw_annotations(frame, yolo_results, violence_results)
             with lock:
                 latest_camera_frame = annotated_frame.copy()
-
-            i3d_pred, i3d_conf = "normal", 0.0
-            if len(clip) >= CLIP_LEN:
-                clip_preprocessed = [cv2.resize(f, I3D_INPUT_SIZE) for f in clip]
-                i3d_pred, i3d_conf = run_prediction(clip_preprocessed)
-            severity = select_severity(yolo_results, i3d_pred)
+            severity = select_severity(yolo_results, violence_prediction)
             
             if severity in ["danger", "suspicious"]:
-                screenshot_path = os.path.join(SCREENSHOT_DIR, f"live_local_{time.time()}.jpg")
-                
-                # ✅ ADDED: Explicit check to ensure the screenshot is saved before proceeding.
+                screenshot_path = os.path.abspath(os.path.join(SCREENSHOT_DIR, f"live_local_{time.time()}.jpg"))
                 try:
                     save_success = cv2.imwrite(screenshot_path, annotated_frame)
                     if not save_success:
                         print(f"⚠️ WARNING: Failed to save screenshot to {screenshot_path}")
-                        screenshot_path = None # Ensure a failed save doesn't create a bad reference
+                        screenshot_path = None
                 except Exception as e:
                     print(f"!!! ERROR saving screenshot: {e}")
                     screenshot_path = None
 
-                # Only proceed to log and alert if the screenshot was saved successfully
                 if screenshot_path:
                     yolo_classes = [det['class'] for det in yolo_results]
-                    alert_message = { "message": f"{severity.capitalize()} Detected: {', '.join(yolo_classes)}", "type": "error" if severity == "danger" else "warning", "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S") }
+                    alert_message = { "message": f"{severity.capitalize()} Detected: {', '.join(yolo_classes)} & {violence_prediction}", "type": "error" if severity == "danger" else "warning", "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S") }
                     yolo_strings = [f"{det['class']} ({det.get('confidence', 0.0):.2f})" for det in yolo_results]
-                    report_data = { "frame": frame_count, "yolo": ", ".join(yolo_strings), "i3d": f"{i3d_pred} ({i3d_conf:.2f})", "final": severity, "screenshot": screenshot_path }
+                    
+                    report_data = {
+                        "frame": frame_count,
+                        "yolo": ", ".join(yolo_strings),
+                        "violence": violence_prediction,
+                        "yolo_object": ", ".join(yolo_strings),
+                        "yolo_violence": violence_prediction,
+                        "final": severity,
+                        "screenshot": screenshot_path
+                    }
                     with lock:
                         camera_alert_buffer.append(alert_message)
                         camera_report_buffer.append(report_data)
-                    
                     if severity == "danger" and (time.time() - last_alert_time) > ALERT_COOLDOWN:
                         send_alert(annotated_frame, severity)
                         last_alert_time = time.time()
@@ -156,7 +177,6 @@ def camera_analysis_loop_local(source=0):
         print("Local camera analysis thread stopped.")
 
 def camera_analysis_loop_network(source=0):
-    """ A high-performance loop for network streams to prevent frame drops. """
     global last_alert_time, latest_camera_frame
     cap = None
     try:
@@ -164,7 +184,6 @@ def camera_analysis_loop_network(source=0):
         if not cap.isOpened():
             print(f"!!! FATAL ERROR in thread: Could not open network stream: {source}")
             return
-        
         frame_count = 0
         while is_camera_processing.is_set():
             cap.grab()
@@ -172,41 +191,46 @@ def camera_analysis_loop_network(source=0):
             if not success:
                 time.sleep(0.1)
                 continue
-            
             yolo_results = detect_from_frame(frame, threshold=YOLO_CONF_THRESHOLD)
-            annotated_frame = draw_annotations(frame, yolo_results)
+            violence_results = run_violence_detection(frame)
+            violence_prediction = violence_results[0]['class']
+            annotated_frame = draw_annotations(frame, yolo_results, violence_results)
             with lock:
                 latest_camera_frame = annotated_frame.copy()
-            
-            resized_frame = cv2.resize(frame, I3D_INPUT_SIZE)
-            clip = getattr(threading.current_thread(), "clip", [])
-            clip.append(resized_frame)
-            if len(clip) > CLIP_LEN:
-                clip.pop(0)
-            setattr(threading.current_thread(), "clip", clip)
-            
-            i3d_pred, i3d_conf = "normal", 0.0
-            if len(clip) >= CLIP_LEN:
-                i3d_pred, i3d_conf = run_prediction(clip)
-            
-            severity = select_severity(yolo_results, i3d_pred)
-            
-            if severity in ["danger", "suspicious"]:
-                screenshot_path = os.path.join(SCREENSHOT_DIR, f"live_network_{time.time()}.jpg")
-                cv2.imwrite(annotated_frame, screenshot_path)
-                
-                yolo_classes = [det['class'] for det in yolo_results]
-                alert_message = { "message": f"{severity.capitalize()} Detected: {', '.join(yolo_classes)}", "type": "error" if severity == "danger" else "warning", "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S") }
-                yolo_strings = [f"{det['class']} ({det.get('confidence', 0.0):.2f})" for det in yolo_results]
-                report_data = { "frame": frame_count, "yolo": ", ".join(yolo_strings), "i3d": f"{i3d_pred} ({i3d_conf:.2f})", "final": severity, "screenshot": screenshot_path }
-                with lock:
-                    camera_alert_buffer.append(alert_message)
-                    camera_report_buffer.append(report_data)
+            severity = select_severity(yolo_results, violence_prediction)
 
-                if severity == "danger" and (time.time() - last_alert_time) > ALERT_COOLDOWN:
-                    send_alert(annotated_frame, severity)
-                    last_alert_time = time.time()
-            
+            if severity in ["danger", "suspicious"]:
+                # ✅ FIXED: Use an absolute path and add error checking for network stream screenshots.
+                screenshot_path = os.path.abspath(os.path.join(SCREENSHOT_DIR, f"live_network_{time.time()}.jpg"))
+                try:
+                    save_success = cv2.imwrite(screenshot_path, annotated_frame)
+                    if not save_success:
+                        print(f"⚠️ WARNING: Failed to save NETWORK screenshot to {screenshot_path}")
+                        screenshot_path = None
+                except Exception as e:
+                    print(f"!!! ERROR saving NETWORK screenshot: {e}")
+                    screenshot_path = None
+
+                if screenshot_path:
+                    yolo_classes = [det['class'] for det in yolo_results]
+                    alert_message = { "message": f"{severity.capitalize()} Detected: {', '.join(yolo_classes)} & {violence_prediction}", "type": "error" if severity == "danger" else "warning", "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S") }
+                    yolo_strings = [f"{det['class']} ({det.get('confidence', 0.0):.2f})" for det in yolo_results]
+                    
+                    report_data = {
+                        "frame": frame_count,
+                        "yolo": ", ".join(yolo_strings),
+                        "violence": violence_prediction,
+                        "yolo_object": ", ".join(yolo_strings),
+                        "yolo_violence": violence_prediction,
+                        "final": severity,
+                        "screenshot": screenshot_path
+                    }
+                    with lock:
+                        camera_alert_buffer.append(alert_message)
+                        camera_report_buffer.append(report_data)
+                    if severity == "danger" and (time.time() - last_alert_time) > ALERT_COOLDOWN:
+                        send_alert(annotated_frame, severity)
+                        last_alert_time = time.time()
             frame_count += 1
             time.sleep(0.01)
     except Exception as e:
@@ -218,24 +242,19 @@ def camera_analysis_loop_network(source=0):
 
 @app.route("/api/start_camera", methods=["POST"])
 def start_camera_analysis():
-    """ This route now intelligently selects the correct analysis loop. """
     global camera_thread
     if camera_thread is None or not camera_thread.is_alive():
         data = request.get_json()
         video_source = data.get('source', 0) if data else 0
-        
         is_network_stream = isinstance(video_source, str)
         if is_network_stream and not video_source.strip():
             video_source = 0
             is_network_stream = False
-            
         target_loop = camera_analysis_loop_network if is_network_stream else camera_analysis_loop_local
-        
         is_camera_processing.set()
         with lock:
             camera_alert_buffer.clear()
             camera_report_buffer.clear()
-        
         camera_thread = threading.Thread(target=target_loop, args=(video_source,), daemon=True)
         camera_thread.start()
         print(f"Starting analysis with {'NETWORK' if is_network_stream else 'LOCAL'} loop for source: {video_source}")
