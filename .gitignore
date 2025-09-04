@@ -17,7 +17,8 @@ sentry-eye-live/yarn-debug.log*
 sentry-eye-live/yarn-error.log*
 sentry-eye-live/pnpm-debug.log*
 sentry-eye-live/lerna-debug.log*
-
+sentry-eye-live/output/
+sentry-eye-live/input/
 # Editor directories and files
 sentry-eye-live/.vscode/*
 !sentry-eye-live/.vscode/extensions.json

@@ -15,7 +15,7 @@ reports/*.pdf
 output/
 # Model weights
 models/*.keras
-models/*.pt
+# models/*.pt
 
 
 # Colab/IDE configs

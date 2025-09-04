@@ -20,10 +20,10 @@ Sentry AI is a **full-stack intelligent surveillance application** that uses dee
 </details>
 
 <details>
-<summary>🤖 AI-Powered Analysis</summary>
+<summary>🤖Dual AI-Powered Analysis</summary>
 
-- **Object Detection:** YOLOv8 model detects people, guns, knives, fires, masks, helmets.
-- **Action Recognition:** I3D model classifies actions for context.
+- **Object Detection:** YOLO model detects people, guns, knives, fires, masks, helmets.
+- **Violence Detection:** YOLO model detects violence.
 - **Severity Assessment:** Events classified automatically as **Normal**, **Suspicious**, or **Danger**.
 
 </details>
@@ -53,7 +53,7 @@ Sentry AI is a **full-stack intelligent surveillance application** that uses dee
 | Area      | Technology                                                                 |
 |-----------|---------------------------------------------------------------------------|
 | Frontend  | React (Vite), TypeScript, Tailwind CSS, Shadcn/ui, Axios                  |
-| Backend   | Python, Flask, OpenCV, PyTorch, Ultralytics YOLOv8, I3D Model, threading  |
+| Backend   | Python, Flask, OpenCV, Ultralytics YOLOv11, threading                     |
 | DevOps    | concurrently (run frontend + backend with one command)                     |
 | Database  | Flat-file JSON for persistent logging                                      |
 
@@ -67,8 +67,8 @@ Sentry AI is a **full-stack intelligent surveillance application** that uses dee
 /
 ├── Sentry_AI_V2/       # Backend: Python, Flask, and AI models
 │    │
-│    ├── models/               # YOLO & I3D weights
-│    ├── detector/             # YOLO, I3D, severity selector
+│    ├── models/               # YOLO  weights
+│    ├── detector/             # YOLO, severity selector
 │    ├── input/                # Camera/video stream
 │    ├── alerts/               # Telegram bot integration
 │    ├── reports/              # PDF report generator
@@ -81,19 +81,8 @@ Sentry AI is a **full-stack intelligent surveillance application** that uses dee
     ├── src/
     ├── public/
     ├── package.json
-    ├── .env
-    ├── bun.lockb
-    ├── components.json
-    ├── eslint.config.js
-    ├── index.html
-    ├── package-lock.json
-    ├── package.json
-    ├── postcss.config.js
-    ├── tailwind.config.ts
-    ├── tsconfig.app.json
-    ├── tsconfig.json
-    ├── tsconfig.node.json
-    └── vite.config.ts
+    └── ...
+    
 
 ```
 ---
@@ -103,7 +92,7 @@ Sentry AI is a **full-stack intelligent surveillance application** that uses dee
 ### Prerequisites
 - Python (3.8+) and pip
 - Node.js (v18+) and npm
-- A YOLOv8 model file named `best.pt`
+- A YOLO model file named `best.pt` and `violence_yolo.pt`
 
 ---
 
@@ -129,6 +118,7 @@ pip install -r requirements.txt
 
 # Place your YOLO model file in the 'models' directory:
 # Sentry_AI_V2/models/best.pt
+# Sentry_AI_V2/models/violence_yolo.pt
 ```
 
 ### 2. Frontend Setup (sentry-eye-live)

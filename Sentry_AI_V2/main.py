@@ -1,6 +1,7 @@
 import os
 import cv2
 import time
+from datetime import datetime
 from input.camera_stream import capture_frames
 from detector.yolo_detector import detect_from_frame
 from detector.violence_detector import run_violence_detection
@@ -11,13 +12,13 @@ from reports.report_generator import generate_pdf_report
 from alerts.telegram_bot import send_alert, send_pdf_with_summary  # Telegram integration
 
 # -------------------- Config --------------------
-VIDEO_SOURCE = r"./tests/124.mp4"  # or 0 for webcam
+VIDEO_SOURCE = r"./tests/demo1.gif"  # or 0 for webcam
 SCREENSHOT_DIR = r"./output/screenshots"
 os.makedirs(SCREENSHOT_DIR, exist_ok=True)
 YOLO_CONF_THRESHOLD = 0.4
 ALERT_COOLDOWN = 15  # seconds between consecutive danger alerts
 
-event_buffer = []   # Collected events for report
+event_buffer = []  # Collected events for report
 last_alert_time = 0
 last_logged = {"severity": "normal", "yolo": ""}  # Prevent duplicate logs
 
@@ -27,6 +28,7 @@ def main():
     print("[INFO] Starting Mini SentryAI+...")
 
     frame_id = 0
+    # We no longer need the 'clip' from capture_frames in a YOLO+YOLO setup
     for frame, _ in capture_frames(VIDEO_SOURCE):
         frame_id += 1
 
@@ -34,7 +36,11 @@ def main():
         yolo_results = detect_from_frame(frame, threshold=YOLO_CONF_THRESHOLD)
 
         # -------------------- YOLO Violence Detection --------------------
-        violence_pred, violence_conf = run_violence_detection(frame)
+        # ✅ FIXED: Correctly handle the list of detections returned by the function.
+        violence_results = run_violence_detection(frame)
+        # The primary prediction is the first (and often only) item in the list.
+        violence_pred = violence_results[0]['class']
+        violence_conf = violence_results[0]['confidence']
 
         # -------------------- Severity selection --------------------
         severity = select_severity(yolo_results, violence_pred)
@@ -56,6 +62,7 @@ def main():
             # Only log when severity or classes change
             if severity != last_logged["severity"] or current_yolo != last_logged["yolo"]:
                 annotated_frame = frame.copy()
+                # Draw object detections
                 for det in yolo_results:
                     x1, y1, x2, y2 = map(int, det["bbox"])
                     color = (0, 0, 255) if det["severity"] == "danger" else (0, 255, 255)
@@ -63,6 +70,14 @@ def main():
                     cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), color, 2)
                     cv2.putText(annotated_frame, label, (x1, y1 - 10),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
+                
+                # Draw violence detections
+                for det in violence_results:
+                     if det['class'] == 'violence':
+                        x1, y1, x2, y2 = map(int, det["bbox"])
+                        cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
+                        cv2.putText(annotated_frame, "Violence Detected", (x1, y2 + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,0,255), 2)
+
 
                 severity_color = (0, 0, 255) if severity == "danger" else (0, 255, 255)
                 cv2.putText(annotated_frame, f"Final Severity: {severity}", (35, 50),
@@ -87,6 +102,7 @@ def main():
                     last_alert_time = time.time()
 
         # -------------------- Visualization --------------------
+        # Draw object detections
         for det in yolo_results:
             x1, y1, x2, y2 = map(int, det["bbox"])
             color = (0, 0, 255) if det["severity"] == "danger" else (0, 255, 255)
@@ -94,13 +110,20 @@ def main():
             cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
             cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
 
+        # ✅ IMPROVEMENT: Draw violence detection boxes on the live preview
+        for det in violence_results:
+             if det['class'] == 'violence':
+                x1, y1, x2, y2 = map(int, det["bbox"])
+                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
+                cv2.putText(frame, "Violence Detected", (x1, y2 + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,0,255), 2)
+
         severity_color = (
             (0, 0, 255) if severity == "danger"
             else (0, 255, 255) if severity == "suspicious"
             else (0, 255, 0)
         )
         cv2.putText(frame, f"Final Severity: {severity}", (35, 50),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1.0, severity_color, 2)
+                      cv2.FONT_HERSHEY_SIMPLEX, 1.0, severity_color, 2)
 
         cv2.imshow("Mini SentryAI+", frame)
         if cv2.waitKey(1) & 0xFF == ord("q"):

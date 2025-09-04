@@ -1,5 +1,5 @@
 # AI / ML
-ultralytics==8.2.77
+ultralytics
 torch
 torchvision
 decord

@@ -10,7 +10,7 @@ Mini SentryAI+ is a modular AI-powered surveillance system that detects **danger
 ## ⚡ Features
 
 - **YOLO Object Detection:** Guns, knives, helmets, masks, etc.
-- **I3D Action Recognition:** Fighting, robbery, normal behavior.
+- **YOLO Violence Detection:** Violence,Non-Violence.
 - **Severity Classification:** Danger / Suspicious / Normal.
 - **Event Logging:** JSON logs with timestamps.
 - **Telegram Alerts:** Images + severity notifications.
@@ -24,7 +24,7 @@ Mini SentryAI+ is a modular AI-powered surveillance system that detects **danger
 ### Clone & Setup
 
 ```bash
-git clone https://github.com/yourusername/Sentry_AI_V2.git
+git clone https://github.com/KalidasanR117/Sentry_AI_V2.git
 cd Sentry_AI_V2
 python -m venv .venv
 .venv\Scripts\activate   # Windows
@@ -57,8 +57,8 @@ Set VIDEO_SOURCE = 0 in main.py.
 ```bash
 sentry_ai/
 │
-├── models/               # YOLO & I3D weights
-├── detector/             # YOLO, I3D, severity selector
+├── models/               # YOLO weights
+├── detector/             # YOLO, severity selector
 ├── input/                # Camera/video stream
 ├── alerts/               # Telegram bot integration
 ├── reports/              # PDF report generator
@@ -70,9 +70,6 @@ sentry_ai/
 
 
 🛠 Configuration
-
-
- - **CLIP_LEN → Frames for I3D prediction**  (default: 40)
 
  - **ALERT_COOLDOWN → Time between danger alerts** (seconds)
 
