@@ -1,4 +1,4 @@
-# ===================================================================
+﻿# ===================================================================
 # Sentry AI Project - Root .gitignore
 # ===================================================================
 
@@ -50,7 +50,7 @@ Sentry_AI_V2/venv/
 Sentry_AI_V2/database/logs/
 Sentry_AI_V2/database/reports.db
 Sentry_AI_V2/output/
-Sentry_AI_V2/input/
+
 
 # Colab/IDE configs
 Sentry_AI_V2/.ipynb_checkpoints/
