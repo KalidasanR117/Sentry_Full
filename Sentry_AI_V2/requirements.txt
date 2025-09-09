@@ -1,22 +1,13 @@
-# AI / ML
 ultralytics
 torch
 torchvision
-decord
-pytorchvideo
-
-# Computer vision
 opencv-python
 Pillow
 numpy
-pandas
-
-# Telegram alerts
+Flask
+Flask-Cors
+gunicorn
 python-telegram-bot==20.3
-
-# PDF generation
 fpdf2==2.7.4
-reportlab==4.0.0
-
-# Database / logging
-SQLAlchemy==2.0.38
+requests
+python-dotenv
