@@ -6,13 +6,13 @@ const Index = () => {
       {/* Header */}
       <header className="w-full bg-gray-900/80 backdrop-blur-md shadow-md p-4 flex items-center justify-between">
         <h1 className="text-xl font-bold text-white">Sentry AI</h1>
-        <nav>
+        {/* <nav>
           <ul className="flex space-x-4 text-sm">
             <li className="hover:text-blue-400 cursor-pointer">Dashboard</li>
             <li className="hover:text-blue-400 cursor-pointer">Reports</li>
             <li className="hover:text-blue-400 cursor-pointer">Settings</li>
           </ul>
-        </nav>
+        </nav> */}
       </header>
 
       {/* Main Content */}
