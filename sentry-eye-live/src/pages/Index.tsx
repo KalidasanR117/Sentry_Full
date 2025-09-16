@@ -1,4 +1,4 @@
-import { SentryDashboard } from "@/components/SentryDashboard";
+import { SentryDashboardModern } from "@/components/SentryDashboardv2";
 
 const Index = () => {
   return (
@@ -17,7 +17,7 @@ const Index = () => {
 
       {/* Main Content */}
       <main className="flex-1 p-6">
-        <SentryDashboard />
+        <SentryDashboardModern />
       </main>
 
       {/* Footer */}
