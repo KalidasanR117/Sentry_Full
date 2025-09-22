@@ -30,7 +30,7 @@ def send_alert(frame, severity):
         image_bytes = BytesIO(buffer.tobytes())
         image_bytes.name = f"{severity}_alert.jpg"
 
-        caption = f"Mini SentryAI+ Alert: {severity.upper()}"
+        caption = f" SentryAI Alert: {severity.upper()}"
 
         bot.send_photo(chat_id=CHAT_ID, photo=image_bytes, caption=caption)
         print(f"[INFO] Telegram {severity} alert sent.")
@@ -52,7 +52,7 @@ def send_pdf_with_summary(pdf_path, summary_text=None):
                 bot.send_message(chat_id=CHAT_ID, text=f"Summary part {idx}/{len(chunks)}:\n{chunk}")
 
         # ------------------ Send PDF ------------------
-        caption = "Mini SentryAI+ Final Report"
+        caption = " SentryAI Final Report"
         with open(pdf_path, "rb") as pdf_file:
             bot.send_document(chat_id=CHAT_ID, document=pdf_file, caption=caption)
 

@@ -27,7 +27,7 @@ def generate_summary_from_events(event_buffer):
         raise Exception("GEMINI_API_KEY is not set or empty!")
 
     # Prepare input text for LLM
-    text_input = "Summarize the following surveillance events detected by Mini SentryAI+:\n\n"
+    text_input = "Summarize the following surveillance events detected by  SentryAI:\n\n"
     for ev in event_buffer:
         text_input += (
             f"- Frame {ev['frame']}: "

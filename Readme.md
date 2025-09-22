@@ -105,7 +105,7 @@ First, set up the Python backend and its dependencies:
 cd Sentry_AI_V2
 
 # Create a Python virtual environment
-python -m venv .venv
+python3.10 -m venv .venv
 
 # Activate the virtual environment
 # On Windows:
